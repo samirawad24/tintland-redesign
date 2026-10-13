@@ -2,6 +2,7 @@
   var d = document;
   d.documentElement.classList.add('js');
   var PHONE = '14077232809';
+  var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // mobile menu
   var menu = d.querySelector('.menu'), nav = d.querySelector('.nav');
@@ -25,6 +26,8 @@
     rv.forEach(function (el) { el.classList.add('in'); });
   }
 
+  function retick(el) { el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick'); }
+
   // gallery lightbox
   var dlg = d.querySelector('#lightbox');
   if (dlg && dlg.showModal) {
@@ -40,6 +43,16 @@
     dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
   }
 
+  // filmstrip buttons
+  var strip = d.querySelector('.strip');
+  if (strip) {
+    d.querySelectorAll('[data-strip]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        strip.scrollBy({ left: parseInt(b.getAttribute('data-strip'), 10) * strip.clientWidth * 0.7, behavior: calm ? 'auto' : 'smooth' });
+      });
+    });
+  }
+
   // tint simulator
   var LEVELS = [
     { v: null, op: 0, desc: 'Bare glass, the way most front doors leave the factory.' },
@@ -50,30 +63,69 @@
     { v: 15, op: 0.82, desc: 'Very dark. Daytime privacy is close to total.' },
     { v: 5, op: 0.94, desc: 'Limo tint. Nobody sees in, and you see less at night.' }
   ];
-  d.querySelectorAll('.sim').forEach(function (sim) {
+  var LIMITS = [28, 15, 6];
+  d.querySelectorAll('.simhero').forEach(function (sim) {
     var range = sim.querySelector('input[type=range]'), tint = sim.querySelector('.tint'),
-        num = sim.querySelector('.sim-num'), cap = sim.querySelector('.sim-cap'), desc = sim.querySelector('.sim-desc'),
-        ticks = sim.querySelectorAll('.ticks button'), rows = sim.querySelectorAll('.legal b');
-    var LIMITS = [28, 15, 6];
+        num = sim.querySelector('.sh-num'), desc = sim.querySelector('.sim-desc'),
+        bar = sim.querySelector('.swatches'), sw = sim.querySelectorAll('.sw'),
+        labels = sim.querySelectorAll('.sw-l span'), rows = sim.querySelectorAll('.legal b');
+    var cur = -1, touched = false;
     function set(i) {
+      i = Math.max(0, Math.min(6, i));
+      if (i === cur) return;
+      cur = i;
       var L = LEVELS[i];
       range.value = i;
       tint.style.opacity = L.op;
-      num.textContent = L.v === null ? 'None' : L.v + '%';
-      cap.textContent = L.v === null ? 'no film on the glass' : 'of visible light gets through';
+      num.textContent = L.v === null ? 'Off' : L.v + '%';
+      retick(num);
       desc.textContent = L.desc;
       range.setAttribute('aria-valuetext', L.v === null ? 'No tint' : L.v + ' percent');
-      ticks.forEach(function (b, k) { b.setAttribute('aria-pressed', k === i ? 'true' : 'false'); });
+      sw.forEach(function (el, k) { el.classList.toggle('on', k === i); });
+      labels.forEach(function (el, k) { el.classList.toggle('on', k === i); });
       rows.forEach(function (b, k) {
         var ok = L.v === null || L.v >= LIMITS[k];
-        b.textContent = ok ? 'Legal in Florida' : 'Too dark for Florida';
-        b.className = ok ? 'ok' : 'no';
+        b.textContent = ok ? 'Legal' : 'Too dark';
+        b.className = ok ? '' : 'no';
       });
     }
-    range.addEventListener('input', function () { set(parseInt(range.value, 10)); });
-    ticks.forEach(function (b, k) { b.addEventListener('click', function () { set(k); }); });
-    set(parseInt(range.value, 10));
+    function fromX(x) {
+      var r = bar.getBoundingClientRect();
+      set(Math.floor((x - r.left) / r.width * 7));
+    }
+    var down = false;
+    bar.addEventListener('pointerdown', function (e) { touched = true; down = true; bar.setPointerCapture(e.pointerId); fromX(e.clientX); });
+    bar.addEventListener('pointermove', function (e) { if (down) fromX(e.clientX); });
+    bar.addEventListener('pointerup', function () { down = false; });
+    bar.addEventListener('pointercancel', function () { down = false; });
+    range.addEventListener('input', function () { touched = true; set(parseInt(range.value, 10)); });
+
+    // on load, walk from bare glass up to 35% so the first thing a visitor sees is the glass changing
+    if (calm) { set(3); return; }
+    set(0);
+    var step = 0;
+    setTimeout(function walk() {
+      if (touched || step >= 3) return;
+      step += 1; set(step);
+      setTimeout(walk, 420);
+    }, 1100);
   });
+
+  // home price board
+  var board = d.querySelector('.board');
+  if (board && window.TL_PRICES) {
+    var segs = d.querySelectorAll('.seg button');
+    segs.forEach(function (b) {
+      b.addEventListener('click', function () {
+        segs.forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        var p = window.TL_PRICES.base[b.getAttribute('data-veh')];
+        board.querySelectorAll('.pr').forEach(function (el) {
+          el.textContent = '$' + p[el.getAttribute('data-film')];
+          retick(el);
+        });
+      });
+    });
+  }
 
   function send(kind, text) {
     var url = kind === 'wa'
